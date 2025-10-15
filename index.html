@@ -100,163 +100,102 @@
 
 <script>
 (function(){
-  const $ = (s)=>document.querySelector(s);
-  const $$ = (s)=>Array.from(document.querySelectorAll(s));
-  const fields = ['title','author','finished','rating','keyIdea','audience','summary','pros','cons','quotes'];
-  const els = Object.fromEntries(fields.map(id=>[id,$('#'+id)]));
-  const out = $('#output');
-
-  function val(id){ return (els[id] && els[id].value || '').trim(); }
-  function section(title, body){ if(!body) return ''; return `${title}\n${body}\n\n— — —\n\n`; }
-  function bulletify(text){ if(!text) return ''; return text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n'); }
-  function quoteBlock(text){ if(!text) return ''; return text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n'); }
-  function datePretty(v){ if(!v) return ''; try{ const d=new Date(v+'T00:00:00'); return d.toLocaleDateString('ru-RU',{year:'numeric',month:'long',day:'numeric'});}catch{return v;} }
-
-  function buildPost(){
-    const title = val('title');
-    const author = val('author');
-    const header = (title||author) ? `📚 ${title}${author? ' — '+author: ''}` : '📚 Рецензия';
-    const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ].filter(Boolean).join(' · ');
-    let intro = '';
-    if(val('summary')) intro += `В книге говорилось о том, что ${val('summary')}. `;
-    if(val('keyIdea')) intro += `На мой взгляд, из книги можно почерпнуть следующее: ${val('keyIdea')}. `;
-    if(val('audience')) intro += `Хочу посоветовать эту книгу тем, кто ${val('audience')}.`;
-
-    const blocks = [
-      section(header + (meta? `\n${meta}`:''), intro),
-      section('🧩 Краткое содержание', val('summary')),
-      section('✅ Сильные стороны', bulletify(val('pros'))),
-      section('⚠️ Что можно улучшить', bulletify(val('cons'))),
-      section('💬 Цитаты', quoteBlock(val('quotes'))),
-    ].join('');
-    return blocks.trim();
+  // --- Safe init (GitHub Pages / Telegram WebView) ---
+  function ready(fn){
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', fn, {once:true});
+    else fn();
   }
 
-  function copyOut(){
-    const text = out.value.trim();
-    if(!text){ alert('Нет текста для копирования'); return; }
-    navigator.clipboard.writeText(text).then(()=>toast('Скопировано'),()=>{
-      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Скопировано');
+  ready(function(){
+    const $ = (s)=>document.querySelector(s);
+    const $$ = (s)=>Array.from(document.querySelectorAll(s));
+
+    // Elements
+    const out = $('#output');
+    const fields = ['title','author','finished','rating','keyIdea','audience','summary','pros','cons','quotes'];
+    const els = Object.fromEntries(fields.map(id=>[id, $('#'+id)]));
+
+    // Helpers
+    const val = (id)=> (els[id] && els[id].value || '').trim();
+    const section = (title, body)=> body ? `${title}\n${body}\n\n— — —\n\n` : '';
+    const bulletify = (text)=> !text ? '' : text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n');
+    const quoteBlock = (text)=> !text ? '' : text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n');
+    const datePretty = (v)=>{ if(!v) return ''; try{ const d=new Date(v+'T00:00:00'); return d.toLocaleDateString('ru-RU',{year:'numeric',month:'long',day:'numeric'});}catch{ return v; } };
+
+    function buildPost(){
+      const title = val('title');
+      const author = val('author');
+      const header = (title||author) ? `📚 ${title}${author? ' — '+author: ''}` : '📚 Рецензия';
+      const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ].filter(Boolean).join(' · ');
+      let intro = '';
+      if(val('summary')) intro += `В книге говорилось о том, что ${val('summary')}. `;
+      if(val('keyIdea')) intro += `На мой взгляд, из книги можно почерпнуть следующее: ${val('keyIdea')}. `;
+      if(val('audience')) intro += `Хочу посоветовать эту книгу тем, кто ${val('audience')}.`;
+
+      const blocks = [
+        section(header + (meta? `\n${meta}`:''), intro),
+        section('🧩 Краткое содержание', val('summary')),
+        section('✅ Сильные стороны', bulletify(val('pros'))),
+        section('⚠️ Что можно улучшить', bulletify(val('cons'))),
+        section('💬 Цитаты', quoteBlock(val('quotes')))
+      ].join('');
+      return blocks.trim();
+    }
+
+    function toast(msg){
+      const t=document.createElement('div');
+      t.textContent=msg;
+      t.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.2);z-index:9999';
+      document.body.appendChild(t); setTimeout(()=>t.remove(),1400);
+    }
+
+    // Buttons (guarded binds)
+    const btnCopy = $('#btnCopy');
+    const btnClear = $('#btnClear');
+    const btnShareTg = $('#btnShareTg');
+
+    btnCopy && btnCopy.addEventListener('click', function(){
+      const text = (out && out.value || '').trim();
+      if(!text) return alert('Нет текста для копирования');
+      (navigator.clipboard? navigator.clipboard.writeText(text) : Promise.reject())
+        .then(()=>toast('Скопировано'))
+        .catch(()=>{ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Скопировано'); });
     });
-  }
-  function shareTelegram(){
-    const text = out.value.trim();
-    if(!text) return alert('Сначала заполните анкету');
 
-    const encoded = encodeURIComponent(text);
-    const ua = navigator.userAgent || '';
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isAndroid = /Android/i.test(ua);
+    btnClear && btnClear.addEventListener('click', function(){
+      if(!confirm('Очистить форму и вывод?')) return;
+      Object.values(els).forEach(e=>{ if(e) e.value=''; });
+      if(out) out.value='';
+    });
 
-    // 1) Самый стабильный путь на мобилках — системное меню
-    if ((isIOS || isAndroid) && navigator.share) {
-      navigator.share({ text }).catch(()=> tryDeepLink());
-      return;
-    }
+    btnShareTg && btnShareTg.addEventListener('click', function(){
+      const text = (out && out.value || '').trim();
+      if(!text) return alert('Сначала заполните анкету');
 
-    // 2) Пытаемся открыть приложение напрямую
-    tryDeepLink();
-
-    function tryDeepLink(){
-      if (isAndroid) {
-        // Intent для Android (надежнее tg:// в современных Chrome)
-        const intent = `intent://send?text=${encoded}#Intent;package=org.telegram.messenger;scheme=telegram;end`;
-        location.href = intent;
-        setTimeout(webFallback, 900);
-        return;
-      }
-      if (isIOS) {
-        // iOS deep link
-        location.href = `tg://msg?text=${encoded}`;
-        setTimeout(webFallback, 900);
-        return;
-      }
-      // Десктоп → сразу веб‑шэринг
-      webFallback();
-    }
-
-    function webFallback(){
-      // Только текст, без url — чтобы не было превью ссылки
+      const encoded = encodeURIComponent(text);
+      // Надёжный фолбэк: Web Telegram share (без параметра url, чтобы не добавлялась ссылка)
       const webUrl = 'https://t.me/share/url?text=' + encoded;
-      // На десктопе удобнее в новой вкладке; на мобилках — текущая вкладка
-      if (isAndroid || isIOS) {
-        location.href = webUrl;
-      } else {
-        window.open(webUrl, '_blank', 'noopener');
+
+      // Мобайл: сначала системное меню, иначе webUrl
+      const ua = navigator.userAgent || '';
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+      if (isMobile && navigator.share) {
+        navigator.share({ text }).catch(()=>{ location.href = webUrl; });
+        return;
       }
-    }
-  })
-        .catch(() => fallbackToWeb());
-      return;
-    }
-
-    // 2) Пытаемся открыть приложение Telegram через deep link
-    const deepLink = 'tg://msg?text=' + encoded; // также работает tg://share?text=
-    let deepTried = false;
-    try {
-      deepTried = true;
-      // Используем переход текущего окна — так iOS/Android охотнее открывают приложение
-      location.href = deepLink;
-      // если приложение не открылось, через ~800мс уводим на веб‑шэринг
-      setTimeout(() => { if (document.visibilityState === 'visible') fallbackToWeb(); }, 800);
-      return;
-    } catch (_) {}
-
-    // 3) Фолбэк на веб‑шэринг (работает и на десктопе, и в мобильном браузере)
-    fallbackToWeb();
-
-    function fallbackToWeb(){
-      const webUrl = 'https://t.me/share/url?text=' + encoded; // только текст, без url
-      // Используем переход в текущем табе — меньше блокировок и чаще предлагается открыть Telegram Desktop
-      location.href = webUrl;
-    }
-  }).catch(() => {
-        const webUrl = 'https://t.me/share/url?text=' + encodeURIComponent(text);
-        window.open(webUrl, '_blank', 'noopener');
-      });
-      return;
-    }
-
-    // 2) Фолбэк: Web Telegram share URL без параметра url (чтобы не было лишней ссылки)
-    const webUrl = 'https://t.me/share/url?text=' + encodeURIComponent(text);
-    window.open(webUrl, '_blank', 'noopener');
-  }
-
-    if (isMobile) {
-      // Сначала пытаемся открыть приложение, затем запасной вариант — веб‑шэринг
-      const fallback = setTimeout(() => { location.href = webUrl; }, 600);
-      location.href = appUrl;
-      return;
-    }
-
-    // Десктоп: открываем Web Telegram в новой вкладке
-    window.open(webUrl, '_blank', 'noopener');
-  }
-  function toast(msg){
-    const t=document.createElement('div'); t.textContent=msg;
-    t.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.2);z-index:9999';
-    document.body.appendChild(t); setTimeout(()=>t.remove(),1400);
-  }
-
-  // Реальное обновление превью при вводе
-  function wireRealtime(){
-    $$('#formCard input, #formCard textarea').forEach(el=>{
-      el.addEventListener('input', ()=>{ out.value = buildPost(); });
-      el.addEventListener('change', ()=>{ out.value = buildPost(); });
+      // Десктоп/вебвью: просто открываем веб‑шэринг
+      window.open(webUrl, '_blank', 'noopener');
     });
-  }
 
-  // Кнопки
-  $('#btnCopy').addEventListener('click', copyOut);
-  $('#btnClear').addEventListener('click', ()=>{
-    if(!confirm('Очистить форму и вывод?')) return;
-    Object.values(els).forEach(e=> e.value='');
-    out.value='';
+    // Live preview
+    function wireRealtime(){
+      const inputs = $$('#formCard input, #formCard textarea');
+      const render = ()=>{ if(out) out.value = buildPost(); };
+      inputs.forEach(el=>{ el.addEventListener('input', render); el.addEventListener('change', render); });
+      render();
+    }
+
+    wireRealtime();
   });
-  $('#btnShareTg').addEventListener('click', shareTelegram);
-
-  // Старт
-  wireRealtime();
-  out.value = buildPost();
 })();
 </script>
