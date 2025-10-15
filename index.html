@@ -144,18 +144,48 @@
     if(!text) return alert('Сначала заполните анкету');
 
     const encoded = encodeURIComponent(text);
-    const webUrl = 'https://t.me/share/url?text=' + encoded; // Web‑шэринг (браузер/desktop)
-    const appUrl = 'tg://msg_url?text=' + encoded;            // Глубокая ссылка в приложение Telegram
-
     const ua = navigator.userAgent || '';
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-    const isTelegramWebView = /Telegram/i.test(ua);
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
 
-    if (isTelegramWebView) {
-      // внутри Telegram WebView спокойно открываем веб‑шэринг
-      location.href = webUrl;
+    // 1) На мобильных сначала пробуем системное меню (самый стабильный вариант)
+    if ((isIOS || isAndroid) && navigator.share) {
+      navigator.share({ text })
+        .catch(() => fallbackToWeb());
       return;
     }
+
+    // 2) Пытаемся открыть приложение Telegram через deep link
+    const deepLink = 'tg://msg?text=' + encoded; // также работает tg://share?text=
+    let deepTried = false;
+    try {
+      deepTried = true;
+      // Используем переход текущего окна — так iOS/Android охотнее открывают приложение
+      location.href = deepLink;
+      // если приложение не открылось, через ~800мс уводим на веб‑шэринг
+      setTimeout(() => { if (document.visibilityState === 'visible') fallbackToWeb(); }, 800);
+      return;
+    } catch (_) {}
+
+    // 3) Фолбэк на веб‑шэринг (работает и на десктопе, и в мобильном браузере)
+    fallbackToWeb();
+
+    function fallbackToWeb(){
+      const webUrl = 'https://t.me/share/url?text=' + encoded; // только текст, без url
+      // Используем переход в текущем табе — меньше блокировок и чаще предлагается открыть Telegram Desktop
+      location.href = webUrl;
+    }
+  }).catch(() => {
+        const webUrl = 'https://t.me/share/url?text=' + encodeURIComponent(text);
+        window.open(webUrl, '_blank', 'noopener');
+      });
+      return;
+    }
+
+    // 2) Фолбэк: Web Telegram share URL без параметра url (чтобы не было лишней ссылки)
+    const webUrl = 'https://t.me/share/url?text=' + encodeURIComponent(text);
+    window.open(webUrl, '_blank', 'noopener');
+  }
 
     if (isMobile) {
       // Сначала пытаемся открыть приложение, затем запасной вариант — веб‑шэринг
