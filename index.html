@@ -142,10 +142,9 @@
   function shareTelegram(){
     const text = out.value.trim();
     if(!text) return alert('Сначала заполните анкету');
-    const url=new URL('https://t.me/share/url');
-    url.searchParams.set('url', location.href);
-    url.searchParams.set('text', text);
-    window.open(url.toString(), '_blank');
+    // Формируем ссылку без параметра url и с корректным кодированием текста
+    const share = 'https://t.me/share/url?text=' + encodeURIComponent(text);
+    window.open(share, '_blank');
   }
   function toast(msg){
     const t=document.createElement('div'); t.textContent=msg;
