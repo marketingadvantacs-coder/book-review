@@ -142,9 +142,30 @@
   function shareTelegram(){
     const text = out.value.trim();
     if(!text) return alert('Сначала заполните анкету');
-    // Формируем ссылку без параметра url и с корректным кодированием текста
-    const share = 'https://t.me/share/url?text=' + encodeURIComponent(text);
-    window.open(share, '_blank');
+
+    const encoded = encodeURIComponent(text);
+    const webUrl = 'https://t.me/share/url?text=' + encoded; // Web‑шэринг (браузер/desktop)
+    const appUrl = 'tg://msg_url?text=' + encoded;            // Глубокая ссылка в приложение Telegram
+
+    const ua = navigator.userAgent || '';
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+    const isTelegramWebView = /Telegram/i.test(ua);
+
+    if (isTelegramWebView) {
+      // внутри Telegram WebView спокойно открываем веб‑шэринг
+      location.href = webUrl;
+      return;
+    }
+
+    if (isMobile) {
+      // Сначала пытаемся открыть приложение, затем запасной вариант — веб‑шэринг
+      const fallback = setTimeout(() => { location.href = webUrl; }, 600);
+      location.href = appUrl;
+      return;
+    }
+
+    // Десктоп: открываем Web Telegram в новой вкладке
+    window.open(webUrl, '_blank', 'noopener');
   }
   function toast(msg){
     const t=document.createElement('div'); t.textContent=msg;
