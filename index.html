@@ -81,8 +81,7 @@
       <label>Любимые цитаты
         <textarea id="quotes" placeholder="Каждую с новой строки"></textarea>
         <div class="hint">Цитаты будут оформлены кавычками и тире</div>
-      </label>
-      <div class="toolbar" id="bottomBar">
+      </label><div class="toolbar" id="bottomBar">
         <button class="ok" id="btnCopy" title="Скопировать в буфер">Скопировать</button>
         <button class="warn" id="btnClear">Очистить</button>
         <button id="btnShareTg" title="Открыть Telegram со сгенерированным текстом">Поделиться в Telegram</button>
@@ -101,41 +100,78 @@
 
 <script>
 (function(){
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const $ = (s)=>document.querySelector(s);
-    const $$ = (s)=>Array.from(document.querySelectorAll(s));
+  const $ = (s)=>document.querySelector(s);
+  const $$ = (s)=>Array.from(document.querySelectorAll(s));
+  const fields = ['title','author','finished','rating','keyIdea','audience','summary','pros','cons','quotes'];
+  const els = Object.fromEntries(fields.map(id=>[id,$('#'+id)]));
+  const out = $('#output');
 
-    const out = $('#output');
-    const fields = ['title','author','finished','rating','keyIdea','audience','summary','pros','cons','quotes'];
-    const els = Object.fromEntries(fields.map(id=>[id,$('#'+id)]));
+  function val(id){ return (els[id] && els[id].value || '').trim(); }
+  function section(title, body){ if(!body) return ''; return `${title}\n${body}\n\n— — —\n\n`; }
+  function bulletify(text){ if(!text) return ''; return text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n'); }
+  function quoteBlock(text){ if(!text) return ''; return text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n'); }
+  function datePretty(v){ if(!v) return ''; try{ const d=new Date(v+'T00:00:00'); return d.toLocaleDateString('ru-RU',{year:'numeric',month:'long',day:'numeric'});}catch{return v;} }
 
-    const val = (id)=> (els[id] && els[id].value || '').trim();
-    const section = (title, body)=> body ? `${title}\n${body}\n\n— — —\n\n` : '';
-    const bulletify = (t)=> !t ? '' : t.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n');
-    const quoteBlock = (t)=> !t ? '' : t.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n');
-    const datePretty = (v)=>{ if(!v) return ''; try{ const d=new Date(v+'T00:00:00'); return d.toLocaleDateString('ru-RU',{year:'numeric',month:'long',day:'numeric'});}catch{ return v; } };
+  function buildPost(){
+    const title = val('title');
+    const author = val('author');
+    const header = (title||author) ? `📚 ${title}${author? ' — '+author: ''}` : '📚 Рецензия';
+    const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ].filter(Boolean).join(' · ');
+    let intro = '';
+    if(val('summary')) intro += `В книге говорилось о том, что ${val('summary')}. `;
+    if(val('keyIdea')) intro += `На мой взгляд, из книги можно почерпнуть следующее: ${val('keyIdea')}. `;
+    if(val('audience')) intro += `Хочу посоветовать эту книгу тем, кто ${val('audience')}.`;
 
-    function buildPost(){
-      const title = val('title');
-      const author = val('author');
-      const header = (title||author)? `📚 ${title}${author? ' — '+author: ''}` : '📚 Рецензия';
-      const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ].filter(Boolean).join(' · ');
-      let intro = '';
-      if(val('summary')) intro += `В книге говорилось о том, что ${val('summary')}. `;
-      if(val('keyIdea')) intro += `На мой взгляд, из книги можно почерпнуть следующее: ${val('keyIdea')}. `;
-      if(val('audience')) intro += `Хочу посоветовать эту книгу тем, кто ${val('audience')}.`;
+    const blocks = [
+      section(header + (meta? `\n${meta}`:''), intro),
+      section('🧩 Краткое содержание', val('summary')),
+      section('✅ Сильные стороны', bulletify(val('pros'))),
+      section('⚠️ Что можно улучшить', bulletify(val('cons'))),
+      section('💬 Цитаты', quoteBlock(val('quotes'))),
+    ].join('');
+    return blocks.trim();
+  }
 
-      const blocks = [
-        section(header + (meta? `\n${meta}`:''), intro),
-        section('🧩 Краткое содержание', val('summary')),
-        section('✅ Сильные стороны', bulletify(val('pros'))),
-        section('⚠️ Что можно улучшить', bulletify(val('cons'))),
-        section('💬 Цитаты', quoteBlock(val('quotes'))),
-      ].join('');
-      return blocks.trim();
-    }
+  function copyOut(){
+    const text = out.value.trim();
+    if(!text){ alert('Нет текста для копирования'); return; }
+    navigator.clipboard.writeText(text).then(()=>toast('Скопировано'),()=>{
+      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Скопировано');
+    });
+  }
+  function shareTelegram(){
+    const text = out.value.trim();
+    if(!text) return alert('Сначала заполните анкету');
+    const url=new URL('https://t.me/share/url');
+    url.searchParams.set('url', location.href);
+    url.searchParams.set('text', text);
+    window.open(url.toString(), '_blank');
+  }
+  function toast(msg){
+    const t=document.createElement('div'); t.textContent=msg;
+    t.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.2);z-index:9999';
+    document.body.appendChild(t); setTimeout(()=>t.remove(),1400);
+  }
 
-    function toast(msg){
-      const t=document.createElement('div');
-      t.textContent=msg;
-      t.style.cssText='position:fixed;left:50%;
+  // Реальное обновление превью при вводе
+  function wireRealtime(){
+    $$('#formCard input, #formCard textarea').forEach(el=>{
+      el.addEventListener('input', ()=>{ out.value = buildPost(); });
+      el.addEventListener('change', ()=>{ out.value = buildPost(); });
+    });
+  }
+
+  // Кнопки
+  $('#btnCopy').addEventListener('click', copyOut);
+  $('#btnClear').addEventListener('click', ()=>{
+    if(!confirm('Очистить форму и вывод?')) return;
+    Object.values(els).forEach(e=> e.value='');
+    out.value='';
+  });
+  $('#btnShareTg').addEventListener('click', shareTelegram);
+
+  // Старт
+  wireRealtime();
+  out.value = buildPost();
+})();
+</script>
