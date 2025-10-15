@@ -100,7 +100,6 @@
 
 <script>
 (function(){
-  // --- Safe init (GitHub Pages / Telegram WebView) ---
   function ready(fn){
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', fn, {once:true});
     else fn();
@@ -110,23 +109,24 @@
     const $ = (s)=>document.querySelector(s);
     const $$ = (s)=>Array.from(document.querySelectorAll(s));
 
-    // Elements
+    // элементы
     const out = $('#output');
     const fields = ['title','author','finished','rating','keyIdea','audience','summary','pros','cons','quotes'];
-    const els = Object.fromEntries(fields.map(id=>[id, $('#'+id)]));
+    const els = Object.fromEntries(fields.map(id=>[id,$('#'+id)]));
 
-    // Helpers
+    // хелперы
     const val = (id)=> (els[id] && els[id].value || '').trim();
     const section = (title, body)=> body ? `${title}\n${body}\n\n— — —\n\n` : '';
-    const bulletify = (text)=> !text ? '' : text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n');
-    const quoteBlock = (text)=> !text ? '' : text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n');
+    const bulletify = (t)=> !t ? '' : t.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n');
+    const quoteBlock = (t)=> !t ? '' : t.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`«${s.replace(/^\"|\"$/g,'')}» —`).join('\n');
     const datePretty = (v)=>{ if(!v) return ''; try{ const d=new Date(v+'T00:00:00'); return d.toLocaleDateString('ru-RU',{year:'numeric',month:'long',day:'numeric'});}catch{ return v; } };
 
     function buildPost(){
       const title = val('title');
       const author = val('author');
       const header = (title||author) ? `📚 ${title}${author? ' — '+author: ''}` : '📚 Рецензия';
-      const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ].filter(Boolean).join(' · ');
+      const meta = [ val('finished')?`закончил(а): ${datePretty(val('finished'))}`:'', val('rating')?`оценка: ${val('rating')}/10`:'' ]
+        .filter(Boolean).join(' · ');
       let intro = '';
       if(val('summary')) intro += `В книге говорилось о том, что ${val('summary')}. `;
       if(val('keyIdea')) intro += `На мой взгляд, из книги можно почерпнуть следующее: ${val('keyIdea')}. `;
@@ -137,7 +137,7 @@
         section('🧩 Краткое содержание', val('summary')),
         section('✅ Сильные стороны', bulletify(val('pros'))),
         section('⚠️ Что можно улучшить', bulletify(val('cons'))),
-        section('💬 Цитаты', quoteBlock(val('quotes')))
+        section('💬 Цитаты', quoteBlock(val('quotes'))),
       ].join('');
       return blocks.trim();
     }
@@ -149,12 +149,23 @@
       document.body.appendChild(t); setTimeout(()=>t.remove(),1400);
     }
 
-    // Buttons (guarded binds)
+    // realtime превью
+    function wireRealtime(){
+      const inputs = $$('#formCard input, #formCard textarea');
+      const render = ()=>{ if(out) out.value = buildPost(); };
+      inputs.forEach(el=>{
+        el.addEventListener('input', render);
+        el.addEventListener('change', render);
+      });
+      render();
+    }
+
+    // кнопки
     const btnCopy = $('#btnCopy');
     const btnClear = $('#btnClear');
     const btnShareTg = $('#btnShareTg');
 
-    btnCopy && btnCopy.addEventListener('click', function(){
+    btnCopy && btnCopy.addEventListener('click', ()=>{
       const text = (out && out.value || '').trim();
       if(!text) return alert('Нет текста для копирования');
       (navigator.clipboard? navigator.clipboard.writeText(text) : Promise.reject())
@@ -162,40 +173,68 @@
         .catch(()=>{ const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Скопировано'); });
     });
 
-    btnClear && btnClear.addEventListener('click', function(){
+    btnClear && btnClear.addEventListener('click', ()=>{
       if(!confirm('Очистить форму и вывод?')) return;
-      Object.values(els).forEach(e=>{ if(e) e.value=''; });
+      Object.values(els).forEach(e=> e && (e.value=''));
       if(out) out.value='';
     });
 
-    btnShareTg && btnShareTg.addEventListener('click', function(){
+    btnShareTg && btnShareTg.addEventListener('click', shareTelegram);
+
+    // === самая устойчивая версия "Поделиться в Telegram" ===
+    function shareTelegram(){
       const text = (out && out.value || '').trim();
       if(!text) return alert('Сначала заполните анкету');
-
       const encoded = encodeURIComponent(text);
-      // Надёжный фолбэк: Web Telegram share (без параметра url, чтобы не добавлялась ссылка)
-      const webUrl = 'https://t.me/share/url?text=' + encoded;
 
-      // Мобайл: сначала системное меню, иначе webUrl
-      const ua = navigator.userAgent || '';
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-      if (isMobile && navigator.share) {
-        navigator.share({ text }).catch(()=>{ location.href = webUrl; });
+      // Внутри Telegram WebApp — открыть нативно
+      if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.openTelegramLink === 'function') {
+        window.Telegram.WebApp.openTelegramLink(`https://t.me/share/url?text=${encoded}`);
         return;
       }
-      // Десктоп/вебвью: просто открываем веб‑шэринг
-      window.open(webUrl, '_blank', 'noopener');
-    });
 
-    // Live preview
-    function wireRealtime(){
-      const inputs = $$('#formCard input, #formCard textarea');
-      const render = ()=>{ if(out) out.value = buildPost(); };
-      inputs.forEach(el=>{ el.addEventListener('input', render); el.addEventListener('change', render); });
-      render();
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isAndroid = /Android/i.test(ua);
+
+      // Мобилки: сначала системное меню
+      if ((isIOS || isAndroid) && navigator.share) {
+        navigator.share({ text }).catch(()=> deepOrWeb());
+        return;
+      }
+
+      // Иначе: пробуем приложение → потом web
+      deepOrWeb();
+
+      function deepOrWeb(){
+        if (isAndroid) {
+          // Надёжный способ для Android (Chrome): намерение в Telegram
+          location.href = `intent://send?text=${encoded}#Intent;package=org.telegram.messenger;scheme=telegram;end`;
+          setTimeout(webFallback, 700);
+          return;
+        }
+        if (isIOS) {
+          // iOS: deep-link в приложение
+          location.href = `tg://share?text=${encoded}`;
+          setTimeout(webFallback, 700);
+          return;
+        }
+        // Десктоп: если есть Telegram Desktop — поймает tg://, иначе упадём в web
+        try { location.href = `tg://msg?text=${encoded}`; } catch(_) {}
+        setTimeout(webFallback, 300);
+      }
+
+      function webFallback(){
+        // Только текст, без url — чтобы не добавлялось превью ссылки
+        const webUrl = 'https://t.me/share/url?text=' + encoded;
+        // Открываем в текущей вкладке, так меньше шансов уйти на telegram.org «в никуда»
+        location.href = webUrl;
+      }
     }
 
+    // запуск
     wireRealtime();
   });
 })();
 </script>
+
