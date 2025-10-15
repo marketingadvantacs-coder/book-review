@@ -148,9 +148,44 @@
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isAndroid = /Android/i.test(ua);
 
-    // 1) На мобильных сначала пробуем системное меню (самый стабильный вариант)
+    // 1) Самый стабильный путь на мобилках — системное меню
     if ((isIOS || isAndroid) && navigator.share) {
-      navigator.share({ text })
+      navigator.share({ text }).catch(()=> tryDeepLink());
+      return;
+    }
+
+    // 2) Пытаемся открыть приложение напрямую
+    tryDeepLink();
+
+    function tryDeepLink(){
+      if (isAndroid) {
+        // Intent для Android (надежнее tg:// в современных Chrome)
+        const intent = `intent://send?text=${encoded}#Intent;package=org.telegram.messenger;scheme=telegram;end`;
+        location.href = intent;
+        setTimeout(webFallback, 900);
+        return;
+      }
+      if (isIOS) {
+        // iOS deep link
+        location.href = `tg://msg?text=${encoded}`;
+        setTimeout(webFallback, 900);
+        return;
+      }
+      // Десктоп → сразу веб‑шэринг
+      webFallback();
+    }
+
+    function webFallback(){
+      // Только текст, без url — чтобы не было превью ссылки
+      const webUrl = 'https://t.me/share/url?text=' + encoded;
+      // На десктопе удобнее в новой вкладке; на мобилках — текущая вкладка
+      if (isAndroid || isIOS) {
+        location.href = webUrl;
+      } else {
+        window.open(webUrl, '_blank', 'noopener');
+      }
+    }
+  })
         .catch(() => fallbackToWeb());
       return;
     }
