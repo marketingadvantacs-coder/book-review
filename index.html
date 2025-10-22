@@ -229,8 +229,11 @@
   function shareTelegram(){
     const text = out.value.trim();
     if(!text) return alert('Сначала заполните анкету');
-    // Отправляем сам текст без ссылки
-    openTelegramWithText(text);
+    
+    // Официальный Telegram Share Widget (https://core.telegram.org/widgets/share)
+    // Работает на всех платформах: автоматически открывает приложение с выбором чата
+    const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent('https://marketingadvantacs-coder.github.io/book-review/') + '&text=' + encodeURIComponent(text);
+    window.location.href = shareUrl;
   }
   function toast(msg){
     const t=document.createElement('div'); t.textContent=msg;
