@@ -106,6 +106,57 @@
   const els = Object.fromEntries(fields.map(id=>[id,$('#'+id)]));
   const out = $('#output');
 
+  // Универсальный вызов Telegram-приложения с выбором чата (строго приложение)
+  function openTelegramWithText(message){
+    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isDesktop = !isIOS && !isAndroid;
+
+    // Сначала копируем текст — чтобы можно было быстро вставить
+    (async()=>{
+      try{ await navigator.clipboard.writeText(message); toast('Текст скопирован'); }catch{
+        try{ const ta=document.createElement('textarea'); ta.value=message; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Текст скопирован'); }catch{}
+      }
+    })();
+
+    const deepCandidates = [
+      'tg://msg?text=' + encodeURIComponent(message),
+      'tg://share?text=' + encodeURIComponent(message),
+      'tg://msg_url?text=' + encodeURIComponent(message),
+    ];
+
+    const openStore = ()=>{
+      if(isAndroid){
+        location.href = 'market://details?id=org.telegram.messenger';
+        setTimeout(()=>{ location.href = 'https://play.google.com/store/apps/details?id=org.telegram.messenger'; }, 800);
+      } else if(isIOS){
+        location.href = 'https://apps.apple.com/app/telegram-messenger/id686449807';
+      } else if(isDesktop){
+        location.href = 'https://desktop.telegram.org/';
+      }
+    };
+
+    let tried = false;
+    const tryOpen = (url)=>{
+      tried = true;
+      let done = false;
+      const clear = ()=>{ if(done) return; done = true; clearTimeout(timer); cleanup(); };
+      const onHide = ()=>{ if(document.hidden) clear(); };
+      const cleanup = ()=>{
+        document.removeEventListener('visibilitychange', onHide);
+        window.removeEventListener('pagehide', clear);
+        window.removeEventListener('blur', clear);
+      };
+      document.addEventListener('visibilitychange', onHide, { once:true });
+      window.addEventListener('pagehide', clear, { once:true });
+      window.addEventListener('blur', clear, { once:true });
+      const timer = setTimeout(()=>{ if(!done) { cleanup(); openStore(); } }, 1000);
+      try { location.replace(url); } catch(_) { clear(); openStore(); }
+    };
+
+    for(const url of deepCandidates){ tryOpen(url); break; }
+  }
+
   function val(id){ return (els[id] && els[id].value || '').trim(); }
   function section(title, body){ if(!body) return ''; return `${title}\n${body}\n\n— — —\n\n`; }
   function bulletify(text){ if(!text) return ''; return text.split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>`• ${s}`).join('\n'); }
@@ -142,63 +193,9 @@
   function shareTelegram(){
     const text = out.value.trim();
     if(!text) return alert('Сначала заполните анкету');
-    // Формируем аккуратное сообщение без голой ссылки в начале
     const anchor = `[литературный компас](${location.href})`;
     const message = `${text}\n\n${anchor}`.trim();
-
-    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
-
-    const openStore = ()=>{
-      if(isAndroid){
-        location.href = 'market://details?id=org.telegram.messenger';
-        setTimeout(()=>{ location.href = 'https://play.google.com/store/apps/details?id=org.telegram.messenger'; }, 800);
-      } else if(isIOS){
-        location.href = 'https://apps.apple.com/app/telegram-messenger/id686449807';
-      }
-    };
-
-    // Сначала пробуем скопировать текст в буфер — чтобы вставить в Телеграм
-    const copyPromise = (async()=>{
-      try{
-        await navigator.clipboard.writeText(message);
-        toast('Текст скопирован');
-      }catch{
-        try{
-          const ta=document.createElement('textarea'); ta.value=message; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-          toast('Текст скопирован');
-        }catch{}
-      }
-    })();
-
-    // Надёжное открытие приложения: deep-link + отмена фолбэка при уходе со страницы
-    const openApp = (deepUrl)=>{
-      let done = false;
-      const clear = ()=>{ if(done) return; done = true; clearTimeout(timer); cleanup(); };
-      const vis = ()=>{ if(document.hidden) clear(); };
-      const cleanup = ()=>{
-        document.removeEventListener('visibilitychange', vis);
-        window.removeEventListener('pagehide', clear);
-        window.removeEventListener('blur', clear);
-      };
-      document.addEventListener('visibilitychange', vis, { once:true });
-      window.addEventListener('pagehide', clear, { once:true });
-      window.addEventListener('blur', clear, { once:true });
-      const launch = ()=>{
-        const timerLocal = setTimeout(()=>{ if(!done) { cleanup(); openStore(); } }, 900);
-        try { location.replace(deepUrl); } catch(_) { clear(); openStore(); }
-        return timerLocal;
-      };
-      const timer = launch();
-    };
-
-    // Пробуем несколько схем Telegram
-    const deepCandidates = [
-      'tg://msg?text=' + encodeURIComponent(message),
-      'tg://share?text=' + encodeURIComponent(message),
-      'tg://msg_url?text=' + encodeURIComponent(message),
-    ];
-    openApp(deepCandidates[0]);
+    openTelegramWithText(message);
   }
   function toast(msg){
     const t=document.createElement('div'); t.textContent=msg;
