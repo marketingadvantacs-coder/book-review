@@ -194,8 +194,8 @@
 
     // Пробуем несколько схем Telegram
     const deepCandidates = [
-      'tg://share?text=' + encodeURIComponent(message),
       'tg://msg?text=' + encodeURIComponent(message),
+      'tg://share?text=' + encodeURIComponent(message),
       'tg://msg_url?text=' + encodeURIComponent(message),
     ];
     openApp(deepCandidates[0]);
