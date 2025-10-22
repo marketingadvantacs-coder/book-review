@@ -114,16 +114,19 @@
 
     // Сначала копируем текст — чтобы можно было быстро вставить
     (async()=>{
-      try{ await navigator.clipboard.writeText(message); toast('Текст скопирован'); }catch{
-        try{ const ta=document.createElement('textarea'); ta.value=message; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Текст скопирован'); }catch{}
+      try{ await navigator.clipboard.writeText(message); toast('Текст скопирован — откройте Telegram и выберите чат'); }catch{
+        try{ const ta=document.createElement('textarea'); ta.value=message; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Текст скопирован — откройте Telegram и выберите чат'); }catch{}
       }
     })();
 
-    const deepCandidates = [
-      'tg://msg?text=' + encodeURIComponent(message),
-      'tg://share?text=' + encodeURIComponent(message),
-      'tg://msg_url?text=' + encodeURIComponent(message),
-    ];
+    // Telegram Desktop часто не принимает payload в deep-link: открываем приложение, а текст уже в буфере
+    const deepCandidates = isDesktop 
+      ? ['tg://'] 
+      : [
+          'tg://msg?text=' + encodeURIComponent(message),
+          'tg://share?text=' + encodeURIComponent(message),
+          'tg://msg_url?text=' + encodeURIComponent(message),
+        ];
 
     const openStore = ()=>{
       if(isAndroid){
@@ -155,6 +158,39 @@
     };
 
     for(const url of deepCandidates){ tryOpen(url); break; }
+  }
+
+  // Шаринг ссылки: строго в приложение через tg://msg_url?url=...
+  function openTelegramWithLink(linkUrl){
+    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isDesktop = !isIOS && !isAndroid;
+
+    const deepUrl = 'tg://msg_url?url=' + encodeURIComponent(linkUrl);
+
+    const openStore = ()=>{
+      if(isAndroid){
+        location.href = 'market://details?id=org.telegram.messenger';
+        setTimeout(()=>{ location.href = 'https://play.google.com/store/apps/details?id=org.telegram.messenger'; }, 800);
+      } else if(isIOS){
+        location.href = 'https://apps.apple.com/app/telegram-messenger/id686449807';
+      } else if(isDesktop){
+        location.href = 'https://desktop.telegram.org/';
+      }
+    };
+
+    let done = false;
+    const onHide = ()=>{ if(document.hidden){ done = true; cleanup(); } };
+    const cleanup = ()=>{
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', cleanup);
+      window.removeEventListener('blur', cleanup);
+    };
+    document.addEventListener('visibilitychange', onHide, { once:true });
+    window.addEventListener('pagehide', cleanup, { once:true });
+    window.addEventListener('blur', cleanup, { once:true });
+    const timer = setTimeout(()=>{ if(!done) { cleanup(); openStore(); } }, 1000);
+    try { location.replace(deepUrl); } catch(_) { clearTimeout(timer); openStore(); }
   }
 
   function val(id){ return (els[id] && els[id].value || '').trim(); }
@@ -193,9 +229,8 @@
   function shareTelegram(){
     const text = out.value.trim();
     if(!text) return alert('Сначала заполните анкету');
-    const anchor = `[литературный компас](${location.href})`;
-    const message = `${text}\n\n${anchor}`.trim();
-    openTelegramWithText(message);
+    // Отправляем сам текст без ссылки
+    openTelegramWithText(text);
   }
   function toast(msg){
     const t=document.createElement('div'); t.textContent=msg;
